@@ -129,6 +129,9 @@ type Config struct {
 	// Used for services that use Vertex AI-style paths but with simple API key authentication.
 	VertexCompatAPIKey []VertexCompatKey `yaml:"vertex-api-key" json:"vertex-api-key"`
 
+	// DevinCLI defines Devin for Terminal / Windsurf ACP configurations.
+	DevinCLI []DevinCLI `yaml:"devin-cli" json:"devin-cli"`
+
 	// AmpCode contains Amp CLI upstream configuration, management restrictions, and model mappings.
 	AmpCode AmpCode `yaml:"ampcode" json:"ampcode"`
 
@@ -137,7 +140,7 @@ type Config struct {
 
 	// OAuthModelAlias defines global model name aliases for OAuth/file-backed auth channels.
 	// These aliases affect both model listing and model routing for supported channels:
-	// gemini-cli, vertex, aistudio, antigravity, claude, codex, kimi.
+	// gemini-cli, vertex, aistudio, antigravity, claude, codex, kimi, devin, windsurf.
 	//
 	// NOTE: This does not apply to existing per-credential model alias features under:
 	// gemini-api-key, codex-api-key, claude-api-key, openai-compatibility, vertex-api-key, and ampcode.
@@ -522,6 +525,63 @@ type GeminiModel struct {
 
 func (m GeminiModel) GetName() string  { return m.Name }
 func (m GeminiModel) GetAlias() string { return m.Alias }
+
+// DevinCLI represents a Devin for Terminal ACP-backed credential.
+type DevinCLI struct {
+	// Name is a stable label for this credential.
+	Name string `yaml:"name" json:"name"`
+
+	// Provider selects the logical provider: "devin" or "windsurf". Empty defaults to "devin".
+	Provider string `yaml:"provider,omitempty" json:"provider,omitempty"`
+
+	// Command is the Devin executable path. Empty defaults to "devin".
+	Command string `yaml:"command,omitempty" json:"command,omitempty"`
+
+	// ConfigPath optionally points at a Devin config.json used with `devin acp --config`.
+	ConfigPath string `yaml:"config-path,omitempty" json:"config-path,omitempty"`
+
+	// CredentialsPath optionally points at Devin credentials.toml.
+	CredentialsPath string `yaml:"credentials-path,omitempty" json:"credentials-path,omitempty"`
+
+	// APIKey optionally supplies a Windsurf API key directly instead of reading credentials.toml.
+	APIKey string `yaml:"api-key,omitempty" json:"api-key,omitempty"`
+
+	// CWD optionally selects the ACP session working directory.
+	CWD string `yaml:"cwd,omitempty" json:"cwd,omitempty"`
+
+	// Priority controls selection preference when multiple credentials match.
+	Priority int `yaml:"priority,omitempty" json:"priority,omitempty"`
+
+	// Prefix optionally namespaces models for this credential.
+	Prefix string `yaml:"prefix,omitempty" json:"prefix,omitempty"`
+
+	// Models defines upstream model names and aliases for request routing.
+	Models []DevinModel `yaml:"models,omitempty" json:"models,omitempty"`
+
+	// ExcludedModels lists model IDs that should be excluded for this provider.
+	ExcludedModels []string `yaml:"excluded-models,omitempty" json:"excluded-models,omitempty"`
+
+	// Disabled prevents this credential from being used for routing.
+	Disabled bool `yaml:"disabled,omitempty" json:"disabled,omitempty"`
+
+	// DisableCooling disables auth/model cooldown scheduling for this credential when true.
+	DisableCooling bool `yaml:"disable-cooling,omitempty" json:"disable-cooling,omitempty"`
+}
+
+// DevinModel describes a mapping between an alias and the upstream ACP model ID.
+type DevinModel struct {
+	// Name is the upstream Devin/Windsurf model identifier.
+	Name string `yaml:"name" json:"name"`
+
+	// Alias is the client-facing model name that maps to Name.
+	Alias string `yaml:"alias" json:"alias"`
+
+	// DisplayName is the human-readable model name shown in model lists.
+	DisplayName string `yaml:"display-name,omitempty" json:"display-name,omitempty"`
+}
+
+func (m DevinModel) GetName() string  { return m.Name }
+func (m DevinModel) GetAlias() string { return m.Alias }
 
 // OpenAICompatibility represents the configuration for OpenAI API compatibility
 // with external providers, allowing model aliases to be routed through OpenAI API format.

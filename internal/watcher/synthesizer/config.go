@@ -10,7 +10,7 @@ import (
 )
 
 // ConfigSynthesizer generates Auth entries from configuration API keys.
-// It handles Gemini, Claude, Codex, OpenAI-compat, and Vertex-compat providers.
+// It handles Gemini, Claude, Codex, OpenAI-compat, Vertex-compat, and Devin ACP providers.
 type ConfigSynthesizer struct{}
 
 // NewConfigSynthesizer creates a new ConfigSynthesizer instance.
@@ -35,6 +35,8 @@ func (s *ConfigSynthesizer) Synthesize(ctx *SynthesisContext) ([]*coreauth.Auth,
 	out = append(out, s.synthesizeOpenAICompat(ctx)...)
 	// Vertex-compat
 	out = append(out, s.synthesizeVertexCompat(ctx)...)
+	// Devin/Windsurf ACP
+	out = append(out, s.synthesizeDevinCLI(ctx)...)
 
 	return out, nil
 }
@@ -360,6 +362,87 @@ func (s *ConfigSynthesizer) synthesizeVertexCompat(ctx *SynthesisContext) []*cor
 			UpdatedAt:  now,
 		}
 		ApplyAuthExcludedModelsMeta(a, cfg, compat.ExcludedModels, "apikey")
+		out = append(out, a)
+	}
+	return out
+}
+
+// synthesizeDevinCLI creates Auth entries for Devin for Terminal ACP credentials.
+func (s *ConfigSynthesizer) synthesizeDevinCLI(ctx *SynthesisContext) []*coreauth.Auth {
+	cfg := ctx.Config
+	now := ctx.Now
+	idGen := ctx.IDGenerator
+
+	out := make([]*coreauth.Auth, 0, len(cfg.DevinCLI))
+	for i := range cfg.DevinCLI {
+		entry := cfg.DevinCLI[i]
+		providerName := strings.ToLower(strings.TrimSpace(entry.Provider))
+		if providerName == "" {
+			providerName = "devin"
+		}
+		if providerName != "devin" && providerName != "windsurf" {
+			continue
+		}
+		name := strings.TrimSpace(entry.Name)
+		if name == "" {
+			name = providerName
+		}
+		prefix := strings.TrimSpace(entry.Prefix)
+		apiKey := strings.TrimSpace(entry.APIKey)
+		credentialsPath := strings.TrimSpace(entry.CredentialsPath)
+		command := strings.TrimSpace(entry.Command)
+		configPath := strings.TrimSpace(entry.ConfigPath)
+		cwd := strings.TrimSpace(entry.CWD)
+		id, token := idGen.Next("devin-cli:"+providerName, name, apiKey, credentialsPath, command, configPath, cwd)
+		attrs := map[string]string{
+			"source":    fmt.Sprintf("config:devin-cli[%s]", token),
+			"auth_kind": "cli",
+		}
+		if hash := diff.ComputeDevinModelsHash(entry.Models); hash != "" {
+			attrs["models_hash"] = hash
+		}
+		if apiKey != "" {
+			attrs["api_key"] = apiKey
+		}
+		if credentialsPath != "" {
+			attrs["credentials_path"] = credentialsPath
+		}
+		if command != "" {
+			attrs["command"] = command
+		}
+		if configPath != "" {
+			attrs["config_path"] = configPath
+		}
+		if cwd != "" {
+			attrs["cwd"] = cwd
+		}
+		if entry.Priority != 0 {
+			attrs["priority"] = strconv.Itoa(entry.Priority)
+		}
+		metadata := map[string]any{}
+		if entry.DisableCooling {
+			metadata["disable_cooling"] = true
+		}
+		status := coreauth.StatusActive
+		if entry.Disabled {
+			status = coreauth.StatusDisabled
+		}
+		a := &coreauth.Auth{
+			ID:         id,
+			Provider:   providerName,
+			Label:      name,
+			Prefix:     prefix,
+			Status:     status,
+			Disabled:   entry.Disabled,
+			Attributes: attrs,
+			Metadata:   metadata,
+			CreatedAt:  now,
+			UpdatedAt:  now,
+		}
+		ApplyAuthExcludedModelsMeta(a, cfg, entry.ExcludedModels, "cli")
+		if len(a.Metadata) == 0 {
+			a.Metadata = nil
+		}
 		out = append(out, a)
 	}
 	return out

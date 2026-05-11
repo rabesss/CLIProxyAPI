@@ -554,6 +554,9 @@ func (m *Manager) executionModelCandidates(auth *Auth, routeModel string) []stri
 		offset := m.nextModelPoolOffset(openAICompatModelPoolKey(auth, requestedModel), len(pool))
 		return rotateStrings(pool, offset)
 	}
+	if upstreamModel := m.resolveDevinCLIUpstreamModel(auth, requestedModel); upstreamModel != "" {
+		return []string{upstreamModel}
+	}
 	resolved := m.applyAPIKeyModelAlias(auth, requestedModel)
 	if strings.TrimSpace(resolved) == "" {
 		resolved = requestedModel
@@ -1908,6 +1911,68 @@ func resolveUpstreamModelForOpenAICompatAPIKey(cfg *internalconfig.Config, auth 
 		return ""
 	}
 	return resolveModelAliasFromConfigModels(requestedModel, asModelAliasEntries(entry.Models))
+}
+
+func (m *Manager) resolveDevinCLIUpstreamModel(auth *Auth, requestedModel string) string {
+	if m == nil || auth == nil {
+		return ""
+	}
+	provider := strings.ToLower(strings.TrimSpace(auth.Provider))
+	if provider != "devin" && provider != "windsurf" {
+		return ""
+	}
+	requestedModel = strings.TrimSpace(requestedModel)
+	if requestedModel == "" {
+		return ""
+	}
+	cfg, _ := m.runtimeConfig.Load().(*internalconfig.Config)
+	if cfg == nil {
+		cfg = &internalconfig.Config{}
+	}
+	entry := resolveDevinCLIConfig(cfg, auth)
+	if entry == nil {
+		return ""
+	}
+	return resolveModelAliasFromConfigModels(requestedModel, asModelAliasEntries(entry.Models))
+}
+
+func resolveDevinCLIConfig(cfg *internalconfig.Config, auth *Auth) *internalconfig.DevinCLI {
+	if cfg == nil || auth == nil || len(cfg.DevinCLI) == 0 {
+		return nil
+	}
+	provider := strings.ToLower(strings.TrimSpace(auth.Provider))
+	label := strings.TrimSpace(auth.Label)
+	var attrKey, attrCredentials, attrCommand, attrConfigPath, attrCWD string
+	if auth.Attributes != nil {
+		attrKey = strings.TrimSpace(auth.Attributes["api_key"])
+		attrCredentials = strings.TrimSpace(auth.Attributes["credentials_path"])
+		attrCommand = strings.TrimSpace(auth.Attributes["command"])
+		attrConfigPath = strings.TrimSpace(auth.Attributes["config_path"])
+		attrCWD = strings.TrimSpace(auth.Attributes["cwd"])
+	}
+	for i := range cfg.DevinCLI {
+		entry := &cfg.DevinCLI[i]
+		entryProvider := strings.ToLower(strings.TrimSpace(entry.Provider))
+		if entryProvider == "" {
+			entryProvider = "devin"
+		}
+		if provider != "" && entryProvider != provider {
+			continue
+		}
+		if label != "" && strings.EqualFold(strings.TrimSpace(entry.Name), label) {
+			return entry
+		}
+		if attrKey != "" && strings.EqualFold(strings.TrimSpace(entry.APIKey), attrKey) {
+			return entry
+		}
+		if attrCredentials != "" && strings.EqualFold(strings.TrimSpace(entry.CredentialsPath), attrCredentials) &&
+			(attrCommand == "" || strings.EqualFold(strings.TrimSpace(entry.Command), attrCommand)) &&
+			(attrConfigPath == "" || strings.EqualFold(strings.TrimSpace(entry.ConfigPath), attrConfigPath)) &&
+			(attrCWD == "" || strings.EqualFold(strings.TrimSpace(entry.CWD), attrCWD)) {
+			return entry
+		}
+	}
+	return nil
 }
 
 type apiKeyModelAliasTable map[string]map[string]string

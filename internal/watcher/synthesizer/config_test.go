@@ -602,6 +602,71 @@ func TestConfigSynthesizer_IDStability(t *testing.T) {
 	}
 }
 
+func TestConfigSynthesizer_DevinCLI(t *testing.T) {
+	synth := NewConfigSynthesizer()
+	ctx := &SynthesisContext{
+		Config: &config.Config{
+			DevinCLI: []config.DevinCLI{
+				{
+					Name:            "devin-local",
+					Provider:        "devin",
+					Command:         "/usr/local/bin/devin",
+					CredentialsPath: "/tmp/credentials.toml",
+					ConfigPath:      "/tmp/config.json",
+					CWD:             "/workspace/project",
+					Prefix:          "devin",
+					Priority:        7,
+					DisableCooling:  true,
+					Models:          []config.DevinModel{{Name: "swe-1-6-fast", Alias: "devin-fast", DisplayName: "Devin Fast"}},
+					ExcludedModels:  []string{"MODEL_*"},
+				},
+				{Name: "windsurf-local", Provider: "windsurf", APIKey: "ws-key", Disabled: true},
+				{Name: "bad", Provider: "unknown", APIKey: "ignored"},
+			},
+		},
+		Now:         time.Now(),
+		IDGenerator: NewStableIDGenerator(),
+	}
+
+	auths, err := synth.Synthesize(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(auths) != 2 {
+		t.Fatalf("expected 2 auths, got %d", len(auths))
+	}
+	devin := auths[0]
+	if devin.Provider != "devin" || devin.Label != "devin-local" || devin.Prefix != "devin" {
+		t.Fatalf("unexpected devin auth identity: provider=%q label=%q prefix=%q", devin.Provider, devin.Label, devin.Prefix)
+	}
+	for key, want := range map[string]string{
+		"auth_kind":        "cli",
+		"command":          "/usr/local/bin/devin",
+		"credentials_path": "/tmp/credentials.toml",
+		"config_path":      "/tmp/config.json",
+		"cwd":              "/workspace/project",
+		"priority":         "7",
+		"excluded_models":  "model_*",
+	} {
+		if got := devin.Attributes[key]; got != want {
+			t.Fatalf("expected %s=%q, got %q", key, want, got)
+		}
+	}
+	if _, ok := devin.Attributes["models_hash"]; !ok {
+		t.Fatal("expected models_hash in devin auth attributes")
+	}
+	if v, ok := devin.Metadata["disable_cooling"].(bool); !ok || !v {
+		t.Fatalf("expected disable_cooling=true, got %v", devin.Metadata["disable_cooling"])
+	}
+	windsurf := auths[1]
+	if windsurf.Provider != "windsurf" || !windsurf.Disabled || windsurf.Status != coreauth.StatusDisabled {
+		t.Fatalf("unexpected windsurf auth: provider=%q disabled=%v status=%s", windsurf.Provider, windsurf.Disabled, windsurf.Status)
+	}
+	if got := windsurf.Attributes["api_key"]; got != "ws-key" {
+		t.Fatalf("expected windsurf api key attr, got %q", got)
+	}
+}
+
 func TestConfigSynthesizer_AllProviders(t *testing.T) {
 	synth := NewConfigSynthesizer()
 	ctx := &SynthesisContext{

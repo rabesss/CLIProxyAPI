@@ -433,6 +433,8 @@ func (s *Service) ensureExecutorsForAuthWithMode(a *coreauth.Auth, forceReplace 
 		s.coreManager.RegisterExecutor(executor.NewClaudeExecutor(s.cfg))
 	case "kimi":
 		s.coreManager.RegisterExecutor(executor.NewKimiExecutor(s.cfg))
+	case "devin", "windsurf":
+		s.coreManager.RegisterExecutor(executor.NewDevinExecutor(s.cfg, strings.ToLower(a.Provider)))
 	default:
 		providerKey := strings.ToLower(strings.TrimSpace(a.Provider))
 		if providerKey == "" {
@@ -1153,6 +1155,17 @@ func (s *Service) registerModelsForAuth(a *coreauth.Auth) {
 	case "kimi":
 		models = registry.GetKimiModels()
 		models = applyExcludedModels(models, excluded)
+	case "devin", "windsurf":
+		models = registry.GetDevinModels()
+		if provider == "windsurf" {
+			models = registry.GetWindsurfModels()
+		}
+		if entry := s.resolveConfigDevinCLI(a); entry != nil {
+			if len(entry.Models) > 0 {
+				models = buildDevinConfigModels(entry, provider)
+			}
+		}
+		models = applyExcludedModels(models, excluded)
 	default:
 		// Handle OpenAI-compatibility providers by name using config
 		if s.cfg != nil {
@@ -1430,6 +1443,45 @@ func (s *Service) resolveConfigCodexKey(auth *coreauth.Auth) *config.CodexKey {
 	return nil
 }
 
+func (s *Service) resolveConfigDevinCLI(auth *coreauth.Auth) *config.DevinCLI {
+	if auth == nil || s.cfg == nil {
+		return nil
+	}
+	provider := strings.ToLower(strings.TrimSpace(auth.Provider))
+	label := strings.TrimSpace(auth.Label)
+	var attrKey, attrCredentials, attrCommand, attrConfigPath, attrCWD string
+	if auth.Attributes != nil {
+		attrKey = strings.TrimSpace(auth.Attributes["api_key"])
+		attrCredentials = strings.TrimSpace(auth.Attributes["credentials_path"])
+		attrCommand = strings.TrimSpace(auth.Attributes["command"])
+		attrConfigPath = strings.TrimSpace(auth.Attributes["config_path"])
+		attrCWD = strings.TrimSpace(auth.Attributes["cwd"])
+	}
+	for i := range s.cfg.DevinCLI {
+		entry := &s.cfg.DevinCLI[i]
+		entryProvider := strings.ToLower(strings.TrimSpace(entry.Provider))
+		if entryProvider == "" {
+			entryProvider = "devin"
+		}
+		if provider != "" && entryProvider != provider {
+			continue
+		}
+		if label != "" && strings.EqualFold(strings.TrimSpace(entry.Name), label) {
+			return entry
+		}
+		if attrKey != "" && strings.EqualFold(strings.TrimSpace(entry.APIKey), attrKey) {
+			return entry
+		}
+		if attrCredentials != "" && strings.EqualFold(strings.TrimSpace(entry.CredentialsPath), attrCredentials) &&
+			strings.EqualFold(strings.TrimSpace(entry.Command), attrCommand) &&
+			strings.EqualFold(strings.TrimSpace(entry.ConfigPath), attrConfigPath) &&
+			strings.EqualFold(strings.TrimSpace(entry.CWD), attrCWD) {
+			return entry
+		}
+	}
+	return nil
+}
+
 func (s *Service) oauthExcludedModels(provider, authKind string) []string {
 	cfg := s.cfg
 	if cfg == nil {
@@ -1640,6 +1692,28 @@ func buildCodexConfigModels(entry *config.CodexKey) []*ModelInfo {
 		return nil
 	}
 	return registry.WithCodexBuiltins(buildConfigModels(entry.Models, "openai", "openai"))
+}
+
+func buildDevinConfigModels(entry *config.DevinCLI, provider string) []*ModelInfo {
+	if entry == nil {
+		return nil
+	}
+	ownedBy := "cognition"
+	modelType := "devin"
+	if strings.EqualFold(provider, "windsurf") {
+		ownedBy = "windsurf"
+		modelType = "windsurf"
+	}
+	models := buildConfigModels(entry.Models, ownedBy, modelType)
+	for i, model := range models {
+		if model == nil || i >= len(entry.Models) {
+			continue
+		}
+		if displayName := strings.TrimSpace(entry.Models[i].DisplayName); displayName != "" {
+			model.DisplayName = displayName
+		}
+	}
+	return models
 }
 
 func rewriteModelInfoName(name, oldID, newID string) string {

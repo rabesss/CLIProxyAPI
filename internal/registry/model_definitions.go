@@ -21,6 +21,8 @@ type staticModelsJSON struct {
 	CodexPro    []*ModelInfo `json:"codex-pro"`
 	Kimi        []*ModelInfo `json:"kimi"`
 	Antigravity []*ModelInfo `json:"antigravity"`
+	Devin       []*ModelInfo `json:"devin"`
+	Windsurf    []*ModelInfo `json:"windsurf"`
 }
 
 // GetClaudeModels returns the standard Claude model definitions.
@@ -76,6 +78,16 @@ func GetKimiModels() []*ModelInfo {
 // GetAntigravityModels returns the standard Antigravity model definitions.
 func GetAntigravityModels() []*ModelInfo {
 	return cloneModelInfos(getModels().Antigravity)
+}
+
+// GetDevinModels returns the standard Devin for Terminal model definitions.
+func GetDevinModels() []*ModelInfo {
+	return cloneModelInfos(getModels().Devin)
+}
+
+// GetWindsurfModels returns the standard Windsurf-backed Devin ACP model definitions.
+func GetWindsurfModels() []*ModelInfo {
+	return cloneModelInfos(getModels().Windsurf)
 }
 
 // WithCodexBuiltins injects hard-coded Codex-only model definitions that should
@@ -167,6 +179,8 @@ func cloneModelInfos(models []*ModelInfo) []*ModelInfo {
 //   - codex
 //   - kimi
 //   - antigravity
+//   - devin
+//   - windsurf
 func GetStaticModelDefinitionsByChannel(channel string) []*ModelInfo {
 	key := strings.ToLower(strings.TrimSpace(channel))
 	switch key {
@@ -186,6 +200,10 @@ func GetStaticModelDefinitionsByChannel(channel string) []*ModelInfo {
 		return GetKimiModels()
 	case "antigravity":
 		return GetAntigravityModels()
+	case "devin":
+		return GetDevinModels()
+	case "windsurf":
+		return GetWindsurfModels()
 	default:
 		return nil
 	}
@@ -208,6 +226,8 @@ func LookupStaticModelInfo(modelID string) *ModelInfo {
 		data.CodexPro,
 		data.Kimi,
 		data.Antigravity,
+		data.Devin,
+		data.Windsurf,
 	}
 	for _, models := range allModels {
 		for _, m := range models {

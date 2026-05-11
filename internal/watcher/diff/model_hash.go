@@ -86,6 +86,22 @@ func ComputeGeminiModelsHash(models []config.GeminiModel) string {
 	return hashJoined(keys)
 }
 
+// ComputeDevinModelsHash returns a stable hash for Devin/Windsurf model aliases.
+func ComputeDevinModelsHash(models []config.DevinModel) string {
+	keys := normalizeModelPairs(func(out func(key string)) {
+		for _, model := range models {
+			name := strings.TrimSpace(model.Name)
+			alias := strings.TrimSpace(model.Alias)
+			displayName := strings.TrimSpace(model.DisplayName)
+			if name == "" && alias == "" && displayName == "" {
+				continue
+			}
+			out(strings.ToLower(name) + "|" + strings.ToLower(alias) + "|" + strings.ToLower(displayName))
+		}
+	})
+	return hashJoined(keys)
+}
+
 // ComputeExcludedModelsHash returns a normalized hash for excluded model lists.
 func ComputeExcludedModelsHash(excluded []string) string {
 	if len(excluded) == 0 {

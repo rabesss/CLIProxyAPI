@@ -192,6 +192,28 @@ nonstream-keepalive-interval: 0
 #       - "*-mini"          # wildcard matching suffix (e.g. gpt-5-codex-mini)
 #       - "*codex*"         # wildcard matching substring (e.g. gpt-5-codex-low)
 
+
+# Devin for Terminal / Windsurf ACP credentials.
+# Uses `devin acp` and reads ~/.local/share/devin/credentials.toml by default.
+# Set provider: "windsurf" for a separate Windsurf-backed route/model pool.
+# devin-cli:
+#   - name: "devin-local"
+#     provider: "devin" # "devin" or "windsurf"
+#     command: "devin" # optional executable path
+#     # config-path: "~/.config/devin/config.json" # optional Devin config override
+#     # credentials-path: "~/.local/share/devin/credentials.toml" # optional; defaults to Devin's normal path
+#     # api-key: "..." # optional Windsurf API key; prefer credentials-path or env-backed secret storage
+#     # cwd: "/path/to/project" # optional ACP session working directory
+#     prefix: "devin" # optional: require calls like "devin/swe-1-6-fast"
+#     disable-cooling: false
+#     models:
+#       - name: "swe-1-6-fast"
+#         alias: "devin-swe-fast"
+#         display-name: "Devin SWE Fast"
+#     excluded-models:
+#       - "MODEL_*" # wildcard matching is supported
+#   - name: "windsurf-local"
+#     provider: "windsurf"
 # Claude API keys
 # claude-api-key:
 #   - api-key: "sk-atSM..." # use the official claude API key, no need to set the base url
@@ -332,8 +354,8 @@ nonstream-keepalive-interval: 0
 
 # Global OAuth model name aliases (per channel)
 # These aliases rename model IDs for both model listing and request routing.
-# Supported channels: gemini-cli, vertex, aistudio, antigravity, claude, codex, kimi.
-# NOTE: Aliases do not apply to gemini-api-key, codex-api-key, claude-api-key, openai-compatibility, vertex-api-key, or ampcode.
+# Supported channels: gemini-cli, vertex, aistudio, antigravity, claude, codex, kimi, devin, windsurf.
+# NOTE: Aliases do not apply to gemini-api-key, codex-api-key, claude-api-key, openai-compatibility, vertex-api-key, devin-cli, or ampcode.
 # NOTE: Because aliases affect the merged /v1 model list and merged request routing, overlapping
 # client-visible names can become ambiguous across providers. /api/provider/{provider}/... helps
 # you select the protocol surface, but inference backend selection can still follow the resolved
