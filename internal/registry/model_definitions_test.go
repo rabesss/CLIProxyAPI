@@ -33,6 +33,27 @@ func TestCodexStaticModelsIncludeGPT55(t *testing.T) {
 	assertGPT55ModelInfo(t, "lookup", model)
 }
 
+func TestBackfillOptionalModelSectionsKeepsLocalDevinModels(t *testing.T) {
+	remote := &staticModelsJSON{}
+	fallback := &staticModelsJSON{
+		Devin:    []*ModelInfo{{ID: "swe-1-6-fast", Object: "model"}},
+		Windsurf: []*ModelInfo{{ID: "swe-1-6-fast", Object: "model"}},
+	}
+
+	backfillOptionalModelSections(remote, fallback)
+
+	if len(remote.Devin) != 1 || remote.Devin[0].ID != "swe-1-6-fast" {
+		t.Fatalf("expected Devin models to be backfilled, got %#v", remote.Devin)
+	}
+	if len(remote.Windsurf) != 1 || remote.Windsurf[0].ID != "swe-1-6-fast" {
+		t.Fatalf("expected Windsurf models to be backfilled, got %#v", remote.Windsurf)
+	}
+	remote.Devin[0].ID = "changed"
+	if fallback.Devin[0].ID != "swe-1-6-fast" {
+		t.Fatal("expected backfilled Devin models to be cloned")
+	}
+}
+
 func findModelInfo(models []*ModelInfo, id string) *ModelInfo {
 	for _, model := range models {
 		if model != nil && model.ID == id {

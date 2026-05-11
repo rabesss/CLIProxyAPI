@@ -179,6 +179,7 @@ func fetchModelsFromRemote(ctx context.Context) (*staticModelsJSON, string) {
 			log.Warnf("models parse failed from %s: %v", url, err)
 			continue
 		}
+		backfillOptionalModelSections(&parsed, getModels())
 		if err := validateModelsCatalog(&parsed); err != nil {
 			log.Warnf("models validate failed from %s: %v", url, err)
 			continue
@@ -315,6 +316,18 @@ func getModels() *staticModelsJSON {
 	modelsCatalogStore.mu.RLock()
 	defer modelsCatalogStore.mu.RUnlock()
 	return modelsCatalogStore.data
+}
+
+func backfillOptionalModelSections(data, fallback *staticModelsJSON) {
+	if data == nil || fallback == nil {
+		return
+	}
+	if len(data.Devin) == 0 {
+		data.Devin = cloneModelInfos(fallback.Devin)
+	}
+	if len(data.Windsurf) == 0 {
+		data.Windsurf = cloneModelInfos(fallback.Windsurf)
+	}
 }
 
 func validateModelsCatalog(data *staticModelsJSON) error {

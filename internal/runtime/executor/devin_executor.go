@@ -41,17 +41,16 @@ const (
 // ACP server accepts Windsurf API keys and also backs Windsurf-authenticated
 // Devin for Terminal sessions.
 type DevinExecutor struct {
-	cfg      *config.Config
 	provider string
 }
 
 // NewDevinExecutor creates a Devin/Windsurf ACP executor for provider.
-func NewDevinExecutor(cfg *config.Config, provider string) *DevinExecutor {
+func NewDevinExecutor(_ *config.Config, provider string) *DevinExecutor {
 	provider = strings.ToLower(strings.TrimSpace(provider))
 	if provider == "" {
 		provider = devinProvider
 	}
-	return &DevinExecutor{cfg: cfg, provider: provider}
+	return &DevinExecutor{provider: provider}
 }
 
 // Identifier returns the provider identifier handled by this executor.
@@ -60,6 +59,7 @@ func (e *DevinExecutor) Identifier() string { return e.provider }
 // Execute runs a non-streaming request through Devin ACP and returns a response
 // in the caller's original API format.
 func (e *DevinExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, req cliproxyexecutor.Request, opts cliproxyexecutor.Options) (resp cliproxyexecutor.Response, err error) {
+	ctx = nonNilContext(ctx)
 	prompt, errPrompt := devinPromptFromRequest(req, opts)
 	if errPrompt != nil {
 		return resp, errPrompt
@@ -73,7 +73,7 @@ func (e *DevinExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, re
 	if err != nil {
 		return resp, err
 	}
-	payload, errBuild := devinBuildNonStreamResponse(opts.SourceFormat, req.Model, text.String(), usage)
+	payload, errBuild := devinBuildNonStreamResponse(devinResponseFormat(req, opts), req.Model, text.String(), usage)
 	if errBuild != nil {
 		return resp, errBuild
 	}
@@ -83,6 +83,7 @@ func (e *DevinExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, re
 // ExecuteStream runs a streaming request through Devin ACP. Chunks are emitted
 // already shaped for the inbound API handler.
 func (e *DevinExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Auth, req cliproxyexecutor.Request, opts cliproxyexecutor.Options) (*cliproxyexecutor.StreamResult, error) {
+	ctx = nonNilContext(ctx)
 	prompt, errPrompt := devinPromptFromRequest(req, opts)
 	if errPrompt != nil {
 		return nil, errPrompt
@@ -105,7 +106,7 @@ func (e *DevinExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 			}
 		}
 		errRun := e.runACP(ctx, auth, req.Model, prompt, func(text string) bool {
-			payload, errChunk := devinBuildStreamDelta(opts.SourceFormat, id, req.Model, text, created)
+			payload, errChunk := devinBuildStreamDelta(devinResponseFormat(req, opts), id, req.Model, text, created)
 			if errChunk != nil {
 				select {
 				case <-ctx.Done():
@@ -122,7 +123,7 @@ func (e *DevinExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 			}
 			return
 		}
-		finalPayload, errFinal := devinBuildStreamFinal(opts.SourceFormat, id, req.Model, created, usage)
+		finalPayload, errFinal := devinBuildStreamFinal(devinResponseFormat(req, opts), id, req.Model, created, usage)
 		if errFinal != nil {
 			select {
 			case <-ctx.Done():
@@ -264,10 +265,12 @@ func newDevinACPClient(ctx context.Context, auth *cliproxyauth.Auth) (*devinACPC
 	if command == "" {
 		command = defaultDevinCommand
 	}
-	cmd := exec.CommandContext(ctx, command, "acp")
+	args := make([]string, 0, 3)
 	if configPath := strings.TrimSpace(authString(auth, "config_path")); configPath != "" {
-		cmd.Args = append(cmd.Args, "--config", expandPath(configPath))
+		args = append(args, "--config", expandPath(configPath))
 	}
+	args = append(args, "acp")
+	cmd := exec.CommandContext(ctx, command, args...)
 	cmd.Dir = resolveDevinCWD(auth)
 	cmd.Env = append(os.Environ(), "NO_COLOR=1")
 	stdin, errStdin := cmd.StdinPipe()
@@ -422,6 +425,20 @@ type devinUsage struct {
 type devinContentBlock struct {
 	Type string `json:"type"`
 	Text string `json:"text,omitempty"`
+}
+
+func nonNilContext(ctx context.Context) context.Context {
+	if ctx == nil {
+		return context.Background()
+	}
+	return ctx
+}
+
+func devinResponseFormat(req cliproxyexecutor.Request, opts cliproxyexecutor.Options) sdktranslator.Format {
+	if opts.SourceFormat != "" {
+		return opts.SourceFormat
+	}
+	return req.Format
 }
 
 func devinPromptFromRequest(req cliproxyexecutor.Request, opts cliproxyexecutor.Options) ([]devinContentBlock, error) {

@@ -1695,7 +1695,7 @@ func buildCodexConfigModels(entry *config.CodexKey) []*ModelInfo {
 }
 
 func buildDevinConfigModels(entry *config.DevinCLI, provider string) []*ModelInfo {
-	if entry == nil {
+	if entry == nil || len(entry.Models) == 0 {
 		return nil
 	}
 	ownedBy := "cognition"
@@ -1704,16 +1704,48 @@ func buildDevinConfigModels(entry *config.DevinCLI, provider string) []*ModelInf
 		ownedBy = "windsurf"
 		modelType = "windsurf"
 	}
-	models := buildConfigModels(entry.Models, ownedBy, modelType)
-	for i, model := range models {
-		if model == nil || i >= len(entry.Models) {
+	now := time.Now().Unix()
+	out := make([]*ModelInfo, 0, len(entry.Models))
+	seen := make(map[string]struct{}, len(entry.Models))
+	for i := range entry.Models {
+		configured := entry.Models[i]
+		name := strings.TrimSpace(configured.Name)
+		alias := strings.TrimSpace(configured.Alias)
+		if alias == "" {
+			alias = name
+		}
+		if alias == "" {
 			continue
 		}
-		if displayName := strings.TrimSpace(entry.Models[i].DisplayName); displayName != "" {
-			model.DisplayName = displayName
+		key := strings.ToLower(alias)
+		if _, exists := seen[key]; exists {
+			continue
 		}
+		seen[key] = struct{}{}
+		display := strings.TrimSpace(configured.DisplayName)
+		if display == "" {
+			display = name
+		}
+		if display == "" {
+			display = alias
+		}
+		info := &ModelInfo{
+			ID:          alias,
+			Object:      "model",
+			Created:     now,
+			OwnedBy:     ownedBy,
+			Type:        modelType,
+			DisplayName: display,
+			UserDefined: true,
+		}
+		if name != "" {
+			if upstream := registry.LookupStaticModelInfo(name); upstream != nil && upstream.Thinking != nil {
+				info.Thinking = upstream.Thinking
+			}
+		}
+		out = append(out, info)
 	}
-	return models
+	return out
 }
 
 func rewriteModelInfoName(name, oldID, newID string) string {
