@@ -2,6 +2,7 @@ package openai
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -20,6 +21,7 @@ type compactCaptureExecutor struct {
 	alt          string
 	sourceFormat string
 	calls        int
+	payload      []byte
 }
 
 func (e *compactCaptureExecutor) Identifier() string { return "test-provider" }
@@ -28,6 +30,7 @@ func (e *compactCaptureExecutor) Execute(ctx context.Context, auth *coreauth.Aut
 	e.calls++
 	e.alt = opts.Alt
 	e.sourceFormat = opts.SourceFormat.String()
+	e.payload = append(e.payload[:0], req.Payload...)
 	return coreexecutor.Response{Payload: []byte(`{"ok":true}`)}, nil
 }
 
@@ -47,7 +50,7 @@ func (e *compactCaptureExecutor) HttpRequest(context.Context, *coreauth.Auth, *h
 	return nil, errors.New("not implemented")
 }
 
-func TestOpenAIResponsesCompactRejectsStream(t *testing.T) {
+func TestOpenAIResponsesCompactNormalizesStream(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	executor := &compactCaptureExecutor{}
 	manager := coreauth.NewManager(nil, nil, nil)
@@ -67,16 +70,26 @@ func TestOpenAIResponsesCompactRejectsStream(t *testing.T) {
 	router := gin.New()
 	router.POST("/v1/responses/compact", h.Compact)
 
-	req := httptest.NewRequest(http.MethodPost, "/v1/responses/compact", strings.NewReader(`{"model":"test-model","stream":true}`))
+	req := httptest.NewRequest(http.MethodPost, "/v1/responses/compact", strings.NewReader(`{"model":"test-model","input":"hello","stream":true}`))
 	req.Header.Set("Content-Type", "application/json")
 	resp := httptest.NewRecorder()
 	router.ServeHTTP(resp, req)
 
-	if resp.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.Code, http.StatusBadRequest)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.Code, http.StatusOK)
 	}
-	if executor.calls != 0 {
-		t.Fatalf("executor calls = %d, want 0", executor.calls)
+	if executor.calls != 1 {
+		t.Fatalf("executor calls = %d, want 1", executor.calls)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(executor.payload, &payload); err != nil {
+		t.Fatalf("payload JSON: %v", err)
+	}
+	if _, ok := payload["stream"]; ok {
+		t.Fatalf("payload still includes stream: %s", string(executor.payload))
+	}
+	if executor.alt != "responses/compact" {
+		t.Fatalf("alt = %q, want %q", executor.alt, "responses/compact")
 	}
 }
 

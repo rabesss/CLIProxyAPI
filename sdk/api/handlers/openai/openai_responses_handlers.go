@@ -405,15 +405,6 @@ func (h *OpenAIResponsesAPIHandler) Compact(c *gin.Context) {
 	}
 
 	streamResult := gjson.GetBytes(rawJSON, "stream")
-	if streamResult.Type == gjson.True {
-		c.JSON(http.StatusBadRequest, handlers.ErrorResponse{
-			Error: handlers.ErrorDetail{
-				Message: "Streaming not supported for compact responses",
-				Type:    "invalid_request_error",
-			},
-		})
-		return
-	}
 	if streamResult.Exists() {
 		if updated, err := sjson.DeleteBytes(rawJSON, "stream"); err == nil {
 			rawJSON = updated
